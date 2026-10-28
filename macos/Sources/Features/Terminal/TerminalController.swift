@@ -171,7 +171,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
 
         // Update our zoom state
         if let window = window as? TerminalWindow {
-            window.surfaceIsZoomed = to.zoomed != nil
+            window.surfaceIsZoomed = to.isZoomed
         }
 
         // If our surface tree is now nil then we close our window.
@@ -653,7 +653,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         guard let window = window as? TerminalWindow else { return }
 
         // Sync our zoom state for splits
-        window.surfaceIsZoomed = surfaceTree.zoomed != nil
+        window.surfaceIsZoomed = surfaceTree.isZoomed
 
         // Set the font for the window and tab titles.
         if let titleFontName = surfaceConfig.windowTitleFontFamily {
@@ -1625,13 +1625,23 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         //
         // Reproduction: titlebar tabs, create two tabs, "move tab left"
         if #available(macOS 26, *) {
-            if window is TitlebarTabsTahoeTerminalWindow {
-                tabGroup.removeWindow(window)
-                targetWindow.addTabbedWindowSafely(window, ordered: ordered)
-                DispatchQueue.main.async {
-                    selectedWindow.makeKey()
-                    (window.windowController as? TerminalController)?.relabelTabs()
+            if window is TitlebarTabsTahoeTerminalWindow, selectedWindow === window {
+                // Move the tabs we pass over to the other side of our tab
+                // instead of moving our tab: removing the selected tab makes
+                // AppKit briefly show a neighbor.
+                if finalIndex < currentIndex {
+                    for passed in tabbedWindows[finalIndex..<currentIndex].reversed() {
+                        tabGroup.removeWindow(passed)
+                        selectedWindow.addTabbedWindowSafely(passed, ordered: .above)
+                    }
+                } else {
+                    for passed in tabbedWindows[(currentIndex + 1)...finalIndex] {
+                        tabGroup.removeWindow(passed)
+                        selectedWindow.addTabbedWindowSafely(passed, ordered: .below)
+                    }
                 }
+
+                (window.windowController as? TerminalController)?.relabelTabs()
 
                 return
             }
